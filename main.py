@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import fitz #PyMuPDF
 from openai import OpenAI
+from pathlib import Path
 
 client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio")
 
@@ -29,8 +30,10 @@ def chatbot_update():
     return data_all
 
 def converse(message, chat_history):
-    response = get_completion(input=message)
-    user_msg = {"role": "user", "content": message}
+    global data_all
+    message_input = f"tolong paparkan penjelasan menggunakan bahasa indonesia untuk konteks '{data_all['Konteks'].values[iterasi]}' dan pertanyaan '{data_all['Pertanyaan'].values[iterasi]}' di dalam PDF yang diunggah {message}"
+    response = get_completion(input=message_input)
+    user_msg = {"role": "user", "content": message_input}
     history.append(user_msg)
     ai_msg = {"role": "assistant", "content": ""}
     history.append(ai_msg)
@@ -124,8 +127,19 @@ def radio_user(text):
 
 def next_row():
     global iterasi
+    global data_all
+    data_all.at[iterasi, 'Chatbot'] = history[-1]["content"]
+    history.clear()
     iterasi += 1
-    return f"Iterasi ke-{iterasi+1}"
+    return f"Iterasi ke-{iterasi+1}", data_all, "", "", "", ""
+
+def simpan_func():
+    # data_all to csv
+    data_all.to_csv("data.csv")
+    return [gr.Button(value="Simpan Data", visible=False), gr.DownloadButton(label=f"Download data.csv", value="./data.csv", visible=True)]
+
+def download():
+    return [gr.Button(value="Simpan Data", visible=True), gr.DownloadButton(label=f"Download Data", value="./data.csv", visible=False)]
 
 data_all_output = gr.DataFrame(data_all, label="Konteks", headers=["Konteks", "Pertanyaan", "Chatbot", "Catatan", "Revelansi"], datatype=['str'], row_count=5, col_count=(5, "fixed"))
 
@@ -162,7 +176,12 @@ with gr.Blocks() as demo:
             
             label_next = gr.Label("Iterasi ke-1")
             button_next = gr.Button(value="Next Row (Lakukan jika sudah di step terakhir)")
-            button_next.click(next_row, None, label_next)
+            button_next.click(next_row, None, outputs=[label_next, data_all_output, text_user, text_radio, text_output, text_output2])
+
+            simpan_data = gr.Button(value="Simpan Data", visible=True)
+            button_download = gr.DownloadButton(label=f"Download Data", value="./data.csv", visible=False)
+            simpan_data.click(simpan_func, None, [simpan_data, button_download])
+            button_download.click(download, None, [simpan_data, button_download])
 
         with gr.Row():
             pdf_input = gr.File(label="Unggah PDF", type="filepath")
